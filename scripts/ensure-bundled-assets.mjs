@@ -19,6 +19,7 @@ fs.mkdirSync(bundled, { recursive: true });
 fs.mkdirSync(out, { recursive: true });
 
 for (const [name, b64] of Object.entries(FILES)) {
+  if (name === 'splash.png' && process.env.SPLASH_ENABLED === 'false') continue;
   const bundledPath = path.join(bundled, name);
   if (!fs.existsSync(bundledPath)) {
     fs.writeFileSync(bundledPath, Buffer.from(b64, 'base64'));
