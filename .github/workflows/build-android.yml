@@ -1,5 +1,6 @@
 # 纯 WebView 壳（Capacitor 7 仅生成工程，无 Cordova）：workflow_dispatch → 签名 APK
 name: Build Android
+run-name: app-builder:${{ inputs.build_id }}
 
 on:
   workflow_dispatch:
@@ -40,6 +41,10 @@ on:
       square_icon_url:
         description: optional square icon path/url (launcher fallback)
         required: false
+      splash_enabled:
+        description: Show the startup splash image
+        required: false
+        default: "true"
       min_sdk:
         description: Android minSdkVersion
         required: false
@@ -83,6 +88,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SPLASH_ENABLED: ${{ inputs.splash_enabled }}
+      APP_BUILDER_MIN_SDK: ${{ inputs.min_sdk }}
+      APP_BUILDER_TARGET_SDK: ${{ inputs.target_sdk }}
+      APP_BUILDER_COMPILE_SDK: ${{ inputs.compile_sdk }}
     steps:
       - uses: actions/checkout@v4
 
@@ -238,6 +249,10 @@ jobs:
           SIGN_V2: ${{ inputs.sign_v2 }}
           SIGN_V3: ${{ inputs.sign_v3 }}
           VERIFY_APK: ${{ inputs.verify_apk }}
+          KEYSTORE_PATH: ${{ github.workspace }}/release.p12
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           APK=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
           if [ -z "$APK" ]; then
@@ -256,27 +271,31 @@ jobs:
           if [ "$SIGN_V1" = "true" ] || [ "$SIGN_V2" = "true" ] || [ "$SIGN_V3" = "true" ]; then
             NEED_RESIGN=true
           fi
+          if [ "$FIX_APK" = "true" ] && [ "$NEED_RESIGN" != "true" ]; then
+            echo "::error::APK repair invalidates signatures; enable at least one signing scheme"
+            exit 1
+          fi
           if [ "$NEED_RESIGN" = "true" ]; then
             BT="$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | sort -V | tail -1)"
             test -n "$BT" || (echo "::error::Android build-tools not found" && exit 1)
             "$BT/zipalign" -p -f 4 "$WORK" "$APK.aligned"
-            V1_FLAG="true"
+            V1_FLAG="false"
             V2_FLAG="false"; V3_FLAG="false"
             [ "$SIGN_V1" = "true" ] && V1_FLAG="true"
             [ "$SIGN_V2" = "true" ] && V2_FLAG="true"
             [ "$SIGN_V3" = "true" ] && V3_FLAG="true"
             "$BT/apksigner" sign \
-              --ks "${{ github.workspace }}/release.p12" \
+              --ks "$KEYSTORE_PATH" \
               --ks-type pkcs12 \
-              --ks-key-alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
-              --ks-pass "pass:${{ secrets.ANDROID_STORE_PASSWORD }}" \
-              --key-pass "pass:${{ secrets.ANDROID_KEY_PASSWORD }}" \
+              --ks-key-alias "$KEY_ALIAS" \
+              --ks-pass env:KEYSTORE_PASSWORD \
+              --key-pass env:KEY_PASSWORD \
               --v1-signing-enabled "$V1_FLAG" \
               --v2-signing-enabled "$V2_FLAG" \
               --v3-signing-enabled "$V3_FLAG" \
               --out "$APK" "$APK.aligned"
             rm -f "$APK.pack-fixed" "$APK.aligned"
-            "$BT/apksigner" verify --min-sdk-version 24 --verbose "$APK" || {
+            "$BT/apksigner" verify --min-sdk-version "$APP_BUILDER_MIN_SDK" --verbose "$APK" || {
               echo "::error::apksigner verify failed after sign"
               exit 1
             }
