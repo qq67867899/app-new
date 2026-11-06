@@ -61,9 +61,9 @@ function readViaPython() {
       .map((l) => l.split(/\s+/, 2)),
   );
   return {
-    minSdkVersion: Number(vals.minSdkVersion?.[1]),
-    targetSdkVersion: Number(vals.targetSdkVersion?.[1]),
-    package: vals.package?.[1] || '?',
+    minSdkVersion: Number(vals.minSdkVersion),
+    targetSdkVersion: Number(vals.targetSdkVersion),
+    package: vals.package || '?',
   };
 }
 
