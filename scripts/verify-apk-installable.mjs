@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { resolveTargetSdkLevels } from './lib/resolve-target-sdk.mjs';
 
 const REQUIRED_STORED = ['resources.arsc', 'AndroidManifest.xml'];
 const ZIP_STORED = 0;
@@ -39,7 +40,7 @@ function findBuildTools() {
 
 function run(cmd, cmdArgs) {
   const r = spawnSync(cmd, cmdArgs, { encoding: 'utf8' });
-  return { ok: r.status === 0, stdout: r.stdout || '', stderr: r.stderr || '' };
+  return { ok: r.status === 0, stdout: r.stdout || '', stderr: r.stderr || r.error?.message || '' };
 }
 
 /** 从 ZIP 中央目录读取条目压缩方式 */
@@ -116,9 +117,14 @@ function main() {
     }
     const apksigner = path.join(bt, process.platform === 'win32' ? 'apksigner.bat' : 'apksigner');
     if (fs.existsSync(apksigner)) {
-      const v = run(apksigner, ['verify', '--min-sdk-version', '24', '--verbose', apk]);
+      const args = ['verify', '--min-sdk-version', String(resolveTargetSdkLevels().minSdk), '--verbose', apk];
+      // Invoke the JAR directly on Windows; spawnSync cannot execute .bat files.
+      const v = process.platform === 'win32'
+        ? run(process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin/java.exe') : 'java', ['-jar', path.join(bt, 'lib/apksigner.jar'), ...args])
+        : run(apksigner, args);
       if (!v.ok) {
         console.error('::error::apksigner verify 未通过');
+        if (v.stderr) console.error(v.stderr);
         problems.push('apksigner');
       } else {
         console.log('OK: apksigner verify');
