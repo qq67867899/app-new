@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeTargetUrl, hostFromTargetUrl } from './lib/target-url.mjs';
 import { resolveTargetSdkLevels } from './lib/resolve-target-sdk.mjs';
-import { resolveCiAppDisplayName } from './lib/app-display-name.mjs';
+import { resolveCiAppDisplayName, appNameResourceValue } from './lib/app-display-name.mjs';
+import { isPngImage } from './lib/png-image.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SHELL_PATCH_MARKER = 'shellPatchVersion=34';
@@ -186,18 +187,18 @@ if (productionReady) {
   const stringsPath = path.join(root, 'android/app/src/main/res/values/strings.xml');
   if (fs.existsSync(stringsPath)) {
     const xml = fs.readFileSync(stringsPath, 'utf8');
-    const m = xml.match(/<string name="app_name">([^<]*)<\/string>/);
+    const m = xml.match(/<string name="app_name"[^>]*>([^<]*)<\/string>/);
     const label = m?.[1] || '';
     if (/\?\?/.test(label)) fail(`app_name 中文乱码: ${label}`);
     const expected = resolveCiAppDisplayName(process.env, root);
-    if (expected && label !== expected) {
+    if (expected && label !== appNameResourceValue(expected)) {
       fail(`app_name 期望「${expected}」实际「${label}」`);
     }
   }
 
   const launcherBg = path.join(root, 'android/app/src/main/res/mipmap-xxhdpi/ic_launcher_background.png');
   const launcherSize = fs.existsSync(launcherBg) ? fs.statSync(launcherBg).size : 0;
-  if (launcherSize < 4096) {
+  if (!isPngImage(launcherBg, 48, 48)) {
     fail(`自定义 launcher 未生效 (${launcherBg} ${launcherSize} bytes)，请检查 resources/icon.png 与 apply-android-assets`);
   }
   const adaptiveXml = path.join(root, 'android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml');
