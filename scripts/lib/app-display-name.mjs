@@ -39,10 +39,16 @@ export function escapeXmlText(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 }
 
+export function appNameResourceValue(appName) {
+  const text = sanitizeAppName(appName).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  // Android quotes protect apostrophes and whitespace; formatted=false permits percent signs.
+  return `"${escapeXmlText(text)}"`;
+}
+
 /** 写入 launcher 显示名（UTF-8 strings.xml） */
 export function writeAppNameStrings(root, appName) {
-  const safe = escapeXmlText(sanitizeAppName(appName));
-  const xml = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name">${safe}</string>\n    <string name="title_activity_main"></string>\n</resources>\n`;
+  const safe = appNameResourceValue(appName);
+  const xml = `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name" formatted="false">${safe}</string>\n    <string name="title_activity_main"></string>\n</resources>\n`;
   const dir = path.join(root, 'android/app/src/main/res/values');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'strings.xml'), xml, 'utf8');
