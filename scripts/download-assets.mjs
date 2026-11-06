@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import './ensure-bundled-assets.mjs';
+import { isPngImage } from './lib/png-image.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const assetsDir = path.join(root, 'resources');
@@ -64,9 +65,9 @@ async function download(label, url, dest) {
   }
 }
 
-function useRepoAsset(name, minBytes = 4096) {
+function useRepoAsset(name) {
   const dest = path.join(assetsDir, name);
-  if (fs.existsSync(dest) && fs.statSync(dest).size >= minBytes) {
+  if (isPngImage(dest, 2, 2)) {
     console.log(`download-assets: use repo resources/${name} (${fs.statSync(dest).size} bytes)`);
     return true;
   }
@@ -84,7 +85,8 @@ if (skipRemote) {
 }
 
 let iconOk = useRepoAsset('icon.png', 4096);
-let splashOk = useRepoAsset('splash.png', 10_000);
+const splashEnabled = process.env.SPLASH_ENABLED !== 'false';
+let splashOk = splashEnabled && useRepoAsset('splash.png');
 let squareOk = useRepoAsset('square-icon.png', 4096);
 
 if (!iconOk && iconUrl && !isPrivateHost(iconUrl)) {
@@ -96,12 +98,12 @@ if (!iconOk && squareUrl && !isPrivateHost(squareUrl)) {
 if (!squareOk && squareUrl && !isPrivateHost(squareUrl)) {
   squareOk = await download('square-icon', squareUrl, path.join(assetsDir, 'square-icon.png'));
 }
-if (!splashOk && splashUrl && !isPrivateHost(splashUrl)) {
+if (splashEnabled && !splashOk && splashUrl && !isPrivateHost(splashUrl)) {
   splashOk = await download('splash', splashUrl, path.join(assetsDir, 'splash.png'));
 }
 
 if (!iconOk) iconOk = copyBundled('icon.png') || copyBundled('square-icon.png');
-if (!splashOk) splashOk = copyBundled('splash.png');
+if (splashEnabled && !splashOk) splashOk = copyBundled('splash.png');
 if (!squareOk && !fs.existsSync(path.join(assetsDir, 'square-icon.png'))) {
   squareOk = copyBundled('square-icon.png');
 }
