@@ -1,5 +1,6 @@
 # 纯 WebView 壳 iOS 未签名 IPA（macOS runner + Capacitor 7）
 name: Build iOS
+run-name: app-builder:${{ inputs.build_id }}
 
 on:
   workflow_dispatch:
@@ -40,6 +41,10 @@ on:
       callback_token:
         description: platform callback token
         required: true
+      splash_enabled:
+        description: Show the startup splash image
+        required: false
+        default: "true"
       min_sdk:
         required: false
         default: "24"
@@ -75,6 +80,11 @@ jobs:
   build:
     runs-on: macos-latest
     timeout-minutes: 90
+    env:
+      SPLASH_ENABLED: ${{ inputs.splash_enabled }}
+      APP_BUILDER_MIN_SDK: ${{ inputs.min_sdk }}
+      APP_BUILDER_TARGET_SDK: ${{ inputs.target_sdk }}
+      APP_BUILDER_COMPILE_SDK: ${{ inputs.compile_sdk }}
     steps:
       - uses: actions/checkout@v4
 
