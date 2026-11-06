@@ -5,13 +5,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { isPngImage } from './lib/png-image.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const resRoot = path.join(root, 'android/app/src/main/res');
 const resources = path.join(root, 'resources');
 const MIPMAP_DENSITIES = ['mipmap-mdpi', 'mipmap-hdpi', 'mipmap-xhdpi', 'mipmap-xxhdpi', 'mipmap-xxxhdpi'];
-const SPLASH_DRAWABLE_DIRS = ['drawable-nodpi', 'drawable'];
-const MIN_ICON_BYTES = 4096;
+const SPLASH_DRAWABLE_DIRS = ['drawable-nodpi'];
 
 function copyIfExists(src, destPath) {
   if (!fs.existsSync(src)) return false;
@@ -130,7 +130,7 @@ function finishPythonIcon(stdout) {
 
 function applyLauncherIcon(iconPath) {
   if (!fs.existsSync(iconPath)) return false;
-  if (iconSourceSize(iconPath) < MIN_ICON_BYTES) {
+  if (!isPngImage(iconPath, 48, 48)) {
     console.warn(`apply-android-assets: icon too small (${iconSourceSize(iconPath)} bytes), skip`);
     return false;
   }
@@ -143,7 +143,7 @@ function applyLauncherIcon(iconPath) {
 function verifyLauncherIconApplied() {
   const probe = path.join(resRoot, 'mipmap-xxhdpi/ic_launcher_background.png');
   const size = fs.existsSync(probe) ? fs.statSync(probe).size : 0;
-  if (size < MIN_ICON_BYTES) {
+  if (!isPngImage(probe, 48, 48)) {
     console.error(`::error::自定义 launcher 未写入 (${probe} ${size} bytes)`);
     process.exit(1);
   }
@@ -161,8 +161,8 @@ function verifyLauncherIconApplied() {
 }
 
 function applySplash(splashPath) {
-  if (!fs.existsSync(splashPath)) return false;
-  if (iconSourceSize(splashPath) < 10_000) return false;
+  if (process.env.SPLASH_ENABLED === 'false' || !fs.existsSync(splashPath)) return false;
+  if (!isPngImage(splashPath, 2, 2)) return false;
   removeCapacitorDefaultSplashes();
   for (const dir of SPLASH_DRAWABLE_DIRS) {
     copyIfExists(splashPath, path.join(resRoot, dir, 'splash.png'));
@@ -251,7 +251,7 @@ if (!fs.existsSync(resRoot)) {
 }
 
 const iconPathCandidate = path.join(resources, 'icon.png');
-const iconPath = fs.existsSync(iconPathCandidate) && iconSourceSize(iconPathCandidate) >= MIN_ICON_BYTES 
+const iconPath = isPngImage(iconPathCandidate, 48, 48) 
   ? iconPathCandidate 
   : null;
 const splashPath = path.join(resources, 'splash.png');
@@ -259,8 +259,16 @@ const splashPath = path.join(resources, 'splash.png');
 const hasIcon = iconPath ? applyLauncherIcon(iconPath) : false;
 const hasSplash = applySplash(splashPath);
 if (hasSplash) {
+  fs.rmSync(path.join(resRoot, 'drawable/splash.xml'), { force: true });
   writeSplashColors();
   writeSplashLaunchDrawable();
+} else {
+  // MainActivity references R.drawable.splash even when the splash overlay is disabled.
+  removeCapacitorDefaultSplashes();
+  fs.rmSync(path.join(resRoot, 'drawable-nodpi/splash.png'), { force: true });
+  fs.rmSync(path.join(resRoot, 'drawable/splash_launch.xml'), { force: true });
+  fs.mkdirSync(path.join(resRoot, 'drawable'), { recursive: true });
+  fs.writeFileSync(path.join(resRoot, 'drawable/splash.xml'), '<shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#FFFFFFFF" /></shape>\n');
 }
 writeLaunchHasSplashBool(hasSplash);
 patchLaunchStyles(hasSplash);
@@ -269,7 +277,7 @@ if (hasIcon) {
   verifyLauncherIconApplied();
 } else {
   const rawIcon = path.join(resources, 'icon.png');
-  if (fs.existsSync(rawIcon) && iconSourceSize(rawIcon) >= MIN_ICON_BYTES) {
+  if (fs.existsSync(rawIcon)) {
     console.error('::error::resources/icon.png 存在但 launcher 写入失败');
     process.exit(1);
   }
