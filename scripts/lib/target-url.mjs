@@ -3,15 +3,17 @@
 export function normalizeTargetUrl(raw, fallback = 'https://example.com/') {
   let u = String(raw || fallback).trim();
   if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
-  if (!u.endsWith('/')) u += '/';
-  return u;
+  const parsed = new URL(u);
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
+    throw new Error('Target URL must be an HTTP/HTTPS website without credentials');
+  }
+  return parsed.href;
 }
 
 export function targetWithNativeParam(url) {
-  const u = normalizeTargetUrl(url);
-  const sep = u.includes('?') ? '&' : '?';
-  if (/[?&]native=1\b/.test(u)) return u;
-  return `${u}${sep}native=1`;
+  const u = new URL(normalizeTargetUrl(url));
+  u.searchParams.set('native', '1');
+  return u.href;
 }
 
 export function hostFromTargetUrl(url) {
